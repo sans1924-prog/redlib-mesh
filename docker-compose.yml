@@ -1,0 +1,8 @@
+services:
+  redlib:
+    image: quay.io/redlib/redlib:latest
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - REDLIB_INTERFACE=0.0.0.0
