@@ -1,24 +1,21 @@
-Redlib Stateless Mesh
+# Redlib Stateless Mesh
+
 Architecture specification for a high-traffic Redlib instance designed to bypass upstream IP bans and rate-limiting while maintaining a <$2,500/year budget.
 
-1. Topology
-Edge (TLS/Cache): 9x geographically distributed VPS nodes ($3–$15/yr/node) fronted by Cloudflare.
+## 1. Topology
+* **Edge (TLS/Cache):** 9x geographically distributed VPS nodes ($3–$15/yr/node) fronted by Cloudflare.
+* **Core (Compute):** 2x CachyOS hubs (Active/Active). No public DNS. Firewalls restricted to Edge IP ingress only.
+* **Egress (Proxy Pool):** Core hubs fetch cache-miss data via rotating residential proxy pool to mimic consumer traffic.
 
-Core (Compute): 2x CachyOS hubs (Active/Active). No public DNS. Firewalls restricted to Edge IP ingress only.
+## 2. Constraints & Budget
+* **Annual Spend:** ~$1,536 (Compute) + ~$964 (Proxy bandwidth @ ~$1/GB) = ~$2,500 total.
+* **Throughput:** Requires >95% cache hit ratio using Nginx `proxy_cache_use_stale`.
+* **Protection:** Edge nodes utilize strict `limit_req` zones per IP to drop scrapers (429) before backend traversal.
 
-Egress (Proxy Pool): Core hubs fetch cache-miss data via rotating residential proxy pool to mimic consumer traffic.
+## 3. Core Sandboxing (Systemd)
+Core nodes run bare-metal CachyOS with `sudo` replaced by `opendoas`.
 
-2. Constraints & Budget
-Annual Spend: ~$1,536 (Compute) + ~$964 (Proxy bandwidth @ ~$1/GB) = ~$2,500 total.
-
-Throughput: Requires >95% cache hit ratio using Nginx proxy_cache_use_stale.
-
-Protection: Edge nodes utilize strict limit_req zones per IP to drop scrapers (429) before backend traversal.
-
-3. Core Sandboxing (Systemd)
-Core nodes run bare-metal CachyOS with sudo replaced by opendoas.
-
-Ini, TOML
+```ini
 [Service]
 ExecStart=/usr/local/bin/redlib
 Restart=always
@@ -47,4 +44,4 @@ Compile Go orchestrator: go build -ldflags="-s -w" -o redlib-mesh main.go.
 
 Deploy configuration and systemd unit files to core hubs.
 
-Set up systemd timer on core hubs to trigger main.rs for encrypted backups.
+Set up systemd timer on core hubs to trigger main.rs for encrypted backups
