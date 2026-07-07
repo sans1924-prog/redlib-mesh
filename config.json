@@ -1,0 +1,6 @@
+{
+  "private_key_path": "/home/user/.ssh/id_ed25519",
+  "nodes": [
+    {"name": "edge-us-east", "host": "198.51.100.1", "port": 22, "user": "admin"}
+  ]
+}
