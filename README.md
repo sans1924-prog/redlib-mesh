@@ -1,3 +1,13 @@
+> [!CAUTION]
+> **Project Status: Early Alpha & Experimental**
+> 
+> **Redlib Stateless Mesh** is an experimental framework currently in an early alpha stage of development. While the core topology, systemd sandboxing, and concurrent orchestration logic are functional and production-verified, the overall pipeline is still actively evolving.
+> 
+> * **Expect Changes:** Structural refactors, configuration adjustments, and optimization updates should be anticipated as real-world testing continues.
+> * **Operational Warning:** Deploy with care in critical environments and closely monitor your rotating proxy bandwidth consumption during initial setup.
+> 
+> Pull requests, bug reports, and technical architecture feedback are highly welcome!
+
 # Redlib Stateless Mesh
 
 Architecture specification for a high-traffic Redlib instance designed to bypass upstream IP bans and rate-limiting while maintaining a <$2,500/year budget.
