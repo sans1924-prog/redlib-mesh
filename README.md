@@ -31,6 +31,8 @@ DeviceAllow=/dev/null r
 4. Edge Orchestration (Go)
 Local-run management binary for concurrent SSH execution via goroutines.
 
+Intelligent Error Handling: Features a two-tier logging system. It provides a concise, real-time summary to the console (with strict network timeouts to prevent hanging on dead nodes) while routing deep-dive execution errors and stack traces to a local mesh-forensic.log file.
+
 See main.go in this repository.
 
 5. Stateless Backups (Rust)
@@ -45,4 +47,4 @@ Compile Go orchestrator: go build -ldflags="-s -w" -o redlib-mesh main.go.
 
 Deploy configuration and systemd unit files to core hubs.
 
-Set up systemd timer on core hubs to trigger main.rs for encrypted backups
+Set up systemd timer on core hubs to trigger main.rs for encrypted backups.
