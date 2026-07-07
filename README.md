@@ -27,6 +27,7 @@ StateDirectory=redlib
 CapabilityBoundingSet=
 SystemCallFilter=@system-service
 DeviceAllow=/dev/null r
+```
 4. Edge Orchestration (Go)
 Local-run management binary for concurrent SSH execution via goroutines.
 
