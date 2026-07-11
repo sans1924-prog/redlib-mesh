@@ -55,3 +55,13 @@ Systemd timer-triggered snapshot/AES-256 GPG encryption.
 2. Compile Go orchestrator: `go build -ldflags="-s -w" -o redlib-mesh main.go`.
 3. Deploy configuration and systemd unit files to core hubs.
 4. Set up systemd timer on core hubs to trigger `main.rs` for encrypted backups.
+
+## Contributing
+
+I'm developing this solo, so PRs and feedback are more than welcome. If you know your way around Nginx proxy-cache tuning, Go concurrency, or Rust, feel free to jump in. 
+
+Check the issues tab for anything tagged `good first issue`, or read the short [CONTRIBUTING.md](./CONTRIBUTING.md) to see how the sandbox is set up.
+
+
+
+
