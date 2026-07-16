@@ -21,6 +21,12 @@ Architecture specification for a high-traffic Redlib instance designed to bypass
 * **Annual Spend:** ~$1,536 (Compute) + ~$964 (Proxy bandwidth @ ~$1/GB) = ~$2,500 total.
 * **Throughput:** Requires >95% cache hit ratio using Nginx `proxy_cache_use_stale`.
 * **Protection:** Edge nodes utilize strict `limit_req` zones per IP to drop scrapers (429) before backend traversal.
+## Local Development & Zero-Budget Testing
+You do not need a $2,500 budget or a fleet of VPS nodes to contribute to this project. You can run the entire orchestrator locally.
+
+1. **Mock Configuration:** Create a `config.json` pointing to local ports (e.g., `127.0.0.1:9999`).
+2. **Execution:** Run `./redlib-mesh "uptime"`. The orchestrator will safely fail to dial the dummy ports, triggering the exponential backoff and retry logic.
+3. **Free Ingress & Egress:** For local testing of the actual proxy mesh, we recommend combining **Cloudflare Tunnels** (for free Edge TLS ingress) with a local **Tor daemon** (for free Egress IP rotation).
 
 ## 3. Core Sandboxing (Systemd)
 Core nodes run bare-metal CachyOS with `sudo` replaced by `opendoas`.
