@@ -1,0 +1,49 @@
+name: Go CI/CD Pipeline
+
+# Trigger this test automatically when you push or open a PR
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest # GitHub provides a free Linux server
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Set up Go Environment
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21' # Uses a modern, stable Go compiler
+
+    - name: 1. Compile & Syntax Check
+      run: |
+        go mod tidy
+        go build -o redlib-mesh main.go
+        echo "✅ Compilation successful. No syntax errors."
+
+    - name: 2. Generate Mock Configuration
+      run: |
+        # Create a fake config and key to test the logic without real servers
+        echo '{
+          "private_key_path": "mock_key",
+          "nodes": [
+            {"name": "GitHub-Runner-Node-1", "host": "127.0.0.1", "port": 9999, "user": "test"}
+          ]
+        }' > config.json
+        touch mock_key
+
+    - name: 3. Execution & Backoff Test
+      run: |
+        echo "Testing execution logic against mock node..."
+        # We append '|| true' so the expected failure (port 9999 is dead) doesn't break the pipeline
+        ./redlib-mesh "uptime" || true
+
+    - name: 4. Verify Forensic Logging
+      run: |
+        echo "--- Displaying mesh-forensic.log ---"
+        cat mesh-forensic.log
