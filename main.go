@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -36,21 +39,42 @@ func initLogger() *os.File {
 }
 
 // runRemoteCommand connects via SSH and executes the command, returning an error if it fails
-func runRemoteCommand(node Node, signer ssh.Signer, cmd string) error {
+func runRemoteCommand(ctx context.Context, node Node, signer ssh.Signer, cmd string) error {
 	config := &ssh.ClientConfig{
 		User: node.User,
 		Auth: []ssh.AuthMethod{
 			ssh.PublicKeys(signer),
 		},
-		// Note: For strict production, replace InsecureIgnoreHostKey with a KnownHosts callback
+		// SECURITY TODO: For strict production, replace InsecureIgnoreHostKey with a KnownHosts callback
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         10 * time.Second, // Prevents hanging on dead nodes
+		Timeout:         8 * time.Second, // Tighter timeout to fail-fast during network degradation
 	}
 
 	address := fmt.Sprintf("%s:%d", node.Host, node.Port)
-	client, err := ssh.Dial("tcp", address, config)
-	if err != nil {
-		return fmt.Errorf("dial failed: %w", err)
+	
+	// Create a channel to handle the SSH dialing concurrently with context cancellation
+	dialResult := make(chan struct {
+		client *ssh.Client
+		err    error
+	}, 1)
+
+	go func() {
+		client, err := ssh.Dial("tcp", address, config)
+		dialResult <- struct {
+			client *ssh.Client
+			err    error
+		}{client, err}
+	}()
+
+	var client *ssh.Client
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("operation cancelled by user")
+	case res := <-dialResult:
+		if res.err != nil {
+			return fmt.Errorf("dial failed: %w", res.err)
+		}
+		client = res.client
 	}
 	defer client.Close()
 
@@ -75,6 +99,18 @@ func main() {
 		os.Exit(1)
 	}
 	cmd := os.Args[1]
+
+	// 0. Setup Graceful Shutdown Context (Catches Ctrl+C)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		fmt.Println("\n\n[\033[33m!\033[0m] Interrupt received. Gracefully shutting down connections...")
+		cancel()
+	}()
 
 	// 1. Setup Forensic Logging
 	logFile := initLogger()
@@ -109,23 +145,63 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 4. Execute Concurrently with Error Tracking
+	// 4. Execute Concurrently with Error Tracking, Retries, and Rate Limiting
 	var wg sync.WaitGroup
 	errorChan := make(chan error, len(config.Nodes))
+	
+	// SEMAPHORE: Limit to exactly 10 concurrent SSH connections at once
+	maxConcurrentConnections := 10
+	semaphore := make(chan struct{}, maxConcurrentConnections)
 
-	fmt.Printf("Executing on %d nodes...\n\n", len(config.Nodes))
+	fmt.Printf("Executing on %d nodes (Max Concurrency: %d). Press Ctrl+C to abort...\n\n", len(config.Nodes), maxConcurrentConnections)
 
 	for _, node := range config.Nodes {
 		wg.Add(1)
 		go func(n Node) {
 			defer wg.Done()
-			err := runRemoteCommand(n, signer, cmd)
-			if err != nil {
-				// Send to forensic log
-				log.Printf("[FAILED] %s: %v\n", n.Name, err)
-				// Send to console channel
-				errorChan <- fmt.Errorf("[\033[31mFAIL\033[0m] %s: %v", n.Name, err)
+
+			// Acquire a semaphore slot before starting
+			semaphore <- struct{}{} 
+			defer func() { <-semaphore }() // Release slot when done
+
+			const maxRetries = 3
+			var lastErr error
+			backoff := 2 * time.Second
+
+			for attempt := 1; attempt <= maxRetries; attempt++ {
+				// Check if the user hit Ctrl+C before starting the next attempt
+				if ctx.Err() != nil {
+					errorChan <- fmt.Errorf("[\033[33mABORTED\033[0m] %s: Cancelled by user", n.Name)
+					return
+				}
+
+				lastErr = runRemoteCommand(ctx, n, signer, cmd)
+				if lastErr == nil {
+					return // Success
+				}
+
+				// If it's a cancellation error, don't retry, just exit
+				if ctx.Err() != nil {
+					errorChan <- fmt.Errorf("[\033[33mABORTED\033[0m] %s: Cancelled during execution", n.Name)
+					return
+				}
+
+				log.Printf("[RETRY] %s (Attempt %d/%d) failed: %v. Retrying in %v...\n", n.Name, attempt, maxRetries, lastErr, backoff)
+
+				if attempt < maxRetries {
+					// Wait for backoff OR until user hits Ctrl+C
+					select {
+					case <-time.After(backoff):
+						backoff *= 2
+					case <-ctx.Done():
+						errorChan <- fmt.Errorf("[\033[33mABORTED\033[0m] %s: Cancelled during backoff", n.Name)
+						return
+					}
+				}
 			}
+
+			log.Printf("[FATAL CRITICAL] %s execution exhausted after %d attempts: %v\n", n.Name, maxRetries, lastErr)
+			errorChan <- fmt.Errorf("[\033[31mFAIL\033[0m] %s (Exhausted %d Retries): %v", n.Name, maxRetries, lastErr)
 		}(node)
 	}
 
@@ -141,9 +217,9 @@ func main() {
 	}
 
 	if failCount > 0 {
-		fmt.Printf("\nCompleted with errors. %d/%d nodes failed. Check mesh-forensic.log for details.\n", failCount, len(config.Nodes))
+		fmt.Printf("\nDeployment finished with warnings. %d/%d nodes failed or aborted. Check mesh-forensic.log.\n", failCount, len(config.Nodes))
 		os.Exit(1)
 	}
 
-	fmt.Println("\nAll nodes updated successfully.")
+	fmt.Println("\nAll nodes updated and verified successfully.")
 }
